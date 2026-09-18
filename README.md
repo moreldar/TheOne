@@ -68,6 +68,26 @@ redis-server &
 # createdb memorycanvas, or point DATABASE_URL at a hosted instance
 ```
 
+### Testing the funnel without cloud storage or a Stripe account
+
+Set `STORAGE_PROVIDER="local"` in `.env` and the app writes uploads and
+generated images straight into `public/uploads` / `public/generations`
+instead of calling S3 — no R2/AWS credentials needed. This is dev/test only
+(see `src/lib/storage/localProvider.ts`); switch it back to `"r2"` or
+`"s3"` before deploying.
+
+With `GENERATION_PROVIDER=mock` (the default) and local storage, you can
+walk the entire upload → style → generate → preview → cart flow with zero
+external accounts.
+
+Checkout still needs a real Stripe account to create a Checkout Session
+(`STRIPE_SECRET_KEY`), since that call goes to Stripe's API. Everything
+*downstream* of Stripe — order creation, idempotency, the fulfillment
+handoff, notifications — can be exercised without one by posting a
+correctly-signed `checkout.session.completed` event straight at
+`/api/webhooks/stripe` (this is exactly what `tests/stripeWebhook.test.ts`
+does, minus the HTTP hop).
+
 Stripe webhooks locally:
 
 ```bash

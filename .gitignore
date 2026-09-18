@@ -10,3 +10,7 @@ coverage/
 .vercel
 next-env.d.ts
 tsconfig.tsbuildinfo
+
+# STORAGE_PROVIDER=local dev/test artifacts (see src/lib/storage/localProvider.ts)
+public/uploads/
+public/generations/

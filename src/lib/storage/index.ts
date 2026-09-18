@@ -4,7 +4,8 @@ import {
   PutObjectCommand,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { buckets, getStorageClient, publicUrlFor } from "./client";
+import { buckets, getStorageClient, isLocalStorage, publicUrlFor } from "./client";
+import { getLocalUploadUrl, writeLocalObject } from "./localProvider";
 
 type BucketName = "uploads" | "generations";
 
@@ -15,6 +16,11 @@ export async function putObject(
   body: Buffer,
   contentType: string,
 ): Promise<void> {
+  if (isLocalStorage()) {
+    await writeLocalObject(key, body);
+    return;
+  }
+
   const client = getStorageClient();
   await client.send(
     new PutObjectCommand({
@@ -45,6 +51,8 @@ export async function getPresignedUploadUrl(
   key: string,
   contentType: string,
 ): Promise<string> {
+  if (isLocalStorage()) return getLocalUploadUrl(key);
+
   const client = getStorageClient();
   const command = new PutObjectCommand({
     Bucket: buckets.uploads(),
@@ -62,6 +70,8 @@ export async function getPresignedDownloadUrl(
   bucket: "uploads" | "generations",
   key: string,
 ): Promise<string> {
+  if (isLocalStorage()) return publicUrlFor(key);
+
   const client = getStorageClient();
   const command = new GetObjectCommand({
     Bucket: bucket === "uploads" ? buckets.uploads() : buckets.generations(),
