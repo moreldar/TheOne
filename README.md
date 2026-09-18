@@ -48,25 +48,52 @@ swapping providers never requires touching calling code.
 
 ## Getting started
 
+You need Node.js 20+, Postgres, and Redis. `docker-compose.yml` in this
+repo gives you the latter two with one command — see the Windows
+quickstart below if you're starting from a completely bare machine.
+
 ```bash
+docker compose up -d   # Postgres + Redis, matches .env.example out of the box
+
 cp .env.example .env
-# fill in DATABASE_URL, REDIS_URL, storage + Stripe keys (test keys are fine)
+# set STORAGE_PROVIDER="local" to skip needing R2/S3 credentials (see below)
 
 pnpm install
 pnpm prisma:migrate   # creates tables
 pnpm prisma:seed      # seeds ~12 styles + 2 products
 
 pnpm dev              # web app on :3000
-pnpm worker:dev        # generation worker, separate process
+pnpm worker:dev        # generation worker, separate process — required for
+                        # generations to actually complete
 ```
 
-You need a local (or hosted) Postgres and Redis reachable at
-`DATABASE_URL` / `REDIS_URL`. For local dev:
+Open `http://localhost:3000`.
 
-```bash
-redis-server &
-# createdb memorycanvas, or point DATABASE_URL at a hosted instance
+### Windows quickstart (PowerShell, starting from nothing)
+
+```powershell
+winget install OpenJS.NodeJS.LTS
+winget install Git.Git
+winget install Docker.DockerDesktop
 ```
+
+Close and reopen PowerShell after each install so `PATH` picks up the new
+tools (`node -v`, `git --version`, `docker --version` should all work).
+Docker Desktop needs to actually be launched once (it may prompt to enable
+WSL2 — accept that, it's a one-time setup) before `docker` commands work.
+
+```powershell
+git clone https://github.com/moreldar/TheOne.git
+cd TheOne
+npm install -g pnpm
+docker compose up -d
+copy .env.example .env
+```
+
+Then edit `.env` in a text editor and set `STORAGE_PROVIDER="local"`.
+Continue with the `pnpm install` / `pnpm prisma:migrate` / `pnpm prisma:seed`
+/ `pnpm dev` steps above (run `pnpm worker:dev` in a second PowerShell
+window, not `&`, since Windows doesn't background jobs the same way).
 
 ### Testing the funnel without cloud storage or a Stripe account
 
