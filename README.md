@@ -69,6 +69,12 @@ pnpm worker:dev        # generation worker, separate process — required for
 
 Open `http://localhost:3000`.
 
+If `pnpm install` ever stops with `ERR_PNPM_IGNORED_BUILDS`, run
+`pnpm approve-builds --all --yes` once and retry — `pnpm-workspace.yaml`
+in this repo already pre-approves Prisma's and sharp's native build
+scripts, but very old pnpm versions may not read that file and need the
+one-time manual approval instead.
+
 ### Windows quickstart (PowerShell, starting from nothing)
 
 ```powershell
