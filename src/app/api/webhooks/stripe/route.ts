@@ -1,14 +1,7 @@
-import { randomBytes } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import type Stripe from "stripe";
-import { Prisma } from "@prisma/client";
-import { prisma } from "@/lib/db";
 import { stripe } from "@/lib/stripe";
-import { getFulfillmentProvider } from "@/lib/providers/fulfillment";
-import { getNotificationProvider } from "@/lib/providers/notification";
-import { getPresignedDownloadUrl } from "@/lib/storage";
-import { assertOrderTransition } from "@/lib/stateMachines/orderStatus";
-import { track } from "@/lib/analytics/track";
+import { createOrderFromCart } from "@/lib/orders/createOrderFromCart";
 
 // Stripe webhooks need the raw body for signature verification, so this
 // route must not run through any JSON body-parsing middleware.
@@ -20,156 +13,25 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     ? JSON.parse(session.metadata.cartItemIds)
     : [];
 
-  const cartItems = await prisma.cartItem.findMany({
-    where: { id: { in: cartItemIds } },
-    include: { product: true, generation: true },
-  });
-
-  if (cartItems.length === 0) {
-    console.error(
-      `[webhook] checkout.session.completed ${session.id} had no matching cart items (already processed or metadata missing)`,
-    );
-    return;
-  }
-
   const shipping = session.shipping_details ?? null;
   const address = shipping?.address ?? session.customer_details?.address ?? null;
-  const shippingName = shipping?.name ?? session.customer_details?.name ?? "Unknown";
-  const guestEmail = session.customer_details?.email ?? null;
 
-  const subtotalCents = cartItems.reduce(
-    (sum, item) => sum + item.product.priceCents * item.quantity,
-    0,
-  );
-  const totalCents = session.amount_total ?? subtotalCents;
-  const shippingCents = session.shipping_cost?.amount_total ?? 0;
-  const taxCents = session.total_details?.amount_tax ?? 0;
-
-  let order;
-  try {
-    order = await prisma.order.create({
-      data: {
-        guestEmail,
-        guestAccessToken: randomBytes(24).toString("hex"),
-        status: "PENDING",
-        stripeCheckoutSessionId: session.id,
-        stripePaymentIntentId:
-          typeof session.payment_intent === "string" ? session.payment_intent : null,
-        shippingName,
-        shippingLine1: address?.line1 ?? "",
-        shippingLine2: address?.line2 ?? null,
-        shippingCity: address?.city ?? "",
-        shippingState: address?.state ?? null,
-        shippingPostalCode: address?.postal_code ?? "",
-        shippingCountry: address?.country ?? "",
-        subtotalCents,
-        shippingCents,
-        taxCents,
-        totalCents,
-        items: {
-          create: cartItems.map((item) => ({
-            cartItemId: item.id,
-            productId: item.productId,
-            productName: item.product.name,
-            unitPriceCents: item.product.priceCents,
-            quantity: item.quantity,
-            printMasterStorageKey: item.generation.printMasterStorageKey ?? "",
-          })),
-        },
-      },
-      include: { items: true },
-    });
-  } catch (err) {
-    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
-      console.log(`[webhook] checkout.session.completed ${session.id} already processed, skipping`);
-      return;
-    }
-    throw err;
-  }
-
-  assertOrderTransition("PENDING", "PAID");
-  order = await prisma.order.update({
-    where: { id: order.id },
-    data: { status: "PAID", paidAt: new Date() },
-    include: { items: true },
-  });
-
-  // Clean up the guest's cart now that it's been converted to an order.
-  await prisma.cartItem.deleteMany({ where: { id: { in: cartItemIds } } });
-
-  if (guestEmail) {
-    await getNotificationProvider().send({
-      template: "order_confirmed",
-      to: guestEmail,
-      data: { orderId: order.id, totalCents, guestAccessToken: order.guestAccessToken },
-    });
-  }
-
-  await track({
-    name: "order_completed",
+  await createOrderFromCart({
+    cartItemIds,
     guestSessionId,
-    properties: { orderId: order.id, totalCents },
+    guestEmail: session.customer_details?.email ?? null,
+    shippingName: shipping?.name ?? session.customer_details?.name ?? "Unknown",
+    shippingLine1: address?.line1 ?? "",
+    shippingLine2: address?.line2 ?? null,
+    shippingCity: address?.city ?? "",
+    shippingState: address?.state ?? null,
+    shippingPostalCode: address?.postal_code ?? "",
+    shippingCountry: address?.country ?? "",
+    paymentReference: session.id,
+    stripePaymentIntentId: typeof session.payment_intent === "string" ? session.payment_intent : null,
+    shippingCents: session.shipping_cost?.amount_total ?? 0,
+    taxCents: session.total_details?.amount_tax ?? 0,
   });
-
-  // Hand off to fulfillment. In production this is where Printful (or
-  // another POD provider) receives the print-ready file + shipping
-  // address. Failures here should not fail the webhook response — Stripe
-  // only cares that we acknowledged payment; fulfillment retry is a
-  // separate concern (TODO: move to its own queue job for resilience).
-  try {
-    const products = await prisma.product.findMany({
-      where: { id: { in: order.items.map((item) => item.productId) } },
-    });
-    const productById = new Map(products.map((p) => [p.id, p]));
-
-    const items = await Promise.all(
-      order.items.map(async (item) => {
-        const product = productById.get(item.productId);
-        return {
-          productSku: product?.fulfillmentProviderSku ?? item.productId,
-          variantId: product?.fulfillmentVariantId ?? null,
-          quantity: item.quantity,
-          printFileUrl: await getPresignedDownloadUrl("generations", item.printMasterStorageKey),
-          printWidthIn: product?.printWidthIn ?? 0,
-          printHeightIn: product?.printHeightIn ?? 0,
-        };
-      }),
-    );
-
-    const result = await getFulfillmentProvider().submitOrder({
-      orderId: order.id,
-      items,
-      shippingAddress: {
-        name: order.shippingName,
-        line1: order.shippingLine1,
-        line2: order.shippingLine2,
-        city: order.shippingCity,
-        state: order.shippingState,
-        postalCode: order.shippingPostalCode,
-        country: order.shippingCountry,
-      },
-    });
-
-    assertOrderTransition("PAID", "IN_PRODUCTION");
-    await prisma.order.update({
-      where: { id: order.id },
-      data: {
-        status: "IN_PRODUCTION",
-        fulfillmentProviderOrderId: result.providerOrderId,
-        fulfillmentStatus: result.status,
-      },
-    });
-
-    if (guestEmail) {
-      await getNotificationProvider().send({
-        template: "order_in_production",
-        to: guestEmail,
-        data: { orderId: order.id },
-      });
-    }
-  } catch (err) {
-    console.error(`[webhook] fulfillment handoff failed for order ${order.id}`, err);
-  }
 }
 
 export async function POST(request: NextRequest) {

@@ -14,6 +14,9 @@ function int(envVar: string, fallback: number): number {
 export const config = {
   appUrl: process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
 
+  /** Gates dev-only shortcuts (e.g. the no-Stripe test checkout) — always false in a real production build. */
+  isDevelopment: process.env.NODE_ENV !== "production",
+
   /** Max free AI generations allowed per guest session/IP before we require email capture. */
   freeGenerationCap: int("FREE_GENERATION_CAP", 5),
 

@@ -80,13 +80,19 @@ With `GENERATION_PROVIDER=mock` (the default) and local storage, you can
 walk the entire upload → style → generate → preview → cart flow with zero
 external accounts.
 
-Checkout still needs a real Stripe account to create a Checkout Session
-(`STRIPE_SECRET_KEY`), since that call goes to Stripe's API. Everything
-*downstream* of Stripe — order creation, idempotency, the fulfillment
-handoff, notifications — can be exercised without one by posting a
-correctly-signed `checkout.session.completed` event straight at
-`/api/webhooks/stripe` (this is exactly what `tests/stripeWebhook.test.ts`
-does, minus the HTTP hop).
+Real Stripe Checkout needs a Stripe account (`STRIPE_SECRET_KEY`), since
+that call goes to Stripe's API. Until you have one, **the cart page shows
+a "Use the test checkout" link** (visible whenever `NODE_ENV !== "production"`,
+which is always true under `next dev`) that takes you to `/checkout/test` —
+a plain form collecting a shipping address, no payment step. Submitting it
+runs the exact same order-creation code path as a real Stripe webhook
+(`src/lib/orders/createOrderFromCart.ts`, shared by both):  it creates a
+real `PAID` → `IN_PRODUCTION` order, clears the cart, fires the
+`order_confirmed`/`order_in_production` notifications, and hands off to
+the `FulfillmentProvider` — then lands you on the real order-status page.
+This route 404s in any real production build/deploy (Next.js forces
+`NODE_ENV=production` there regardless of `.env`), so it's not something
+you can accidentally ship live.
 
 Stripe webhooks locally:
 
