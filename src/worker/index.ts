@@ -7,7 +7,7 @@ import { getGenerationProvider, GenerationProviderError } from "../lib/providers
 import { getModerationProvider } from "../lib/providers/moderation";
 import { buildGenerationKey, putObject, publicUrlFor } from "../lib/storage";
 import { track } from "../lib/analytics/track";
-import { buildWatermarkedPreview } from "./watermark";
+import { buildWatermarkedPreview, normalizeOrientation } from "./watermark";
 
 const CONCURRENCY = Number.parseInt(process.env.GENERATION_WORKER_CONCURRENCY ?? "3", 10);
 
@@ -51,10 +51,14 @@ async function processGenerationJob(job: Job<GenerationJobData>) {
       generationId,
     });
 
-    const printMasterKey = buildGenerationKey(generationId, "print-master");
-    await putObject("generations", printMasterKey, result.imageBuffer, "image/png");
+    // Normalize orientation once here so both the purchased print file and
+    // the preview are upright, regardless of source-photo EXIF metadata.
+    const orientedImage = await normalizeOrientation(result.imageBuffer);
 
-    const previewBuffer = await buildWatermarkedPreview(result.imageBuffer);
+    const printMasterKey = buildGenerationKey(generationId, "print-master");
+    await putObject("generations", printMasterKey, orientedImage, "image/png");
+
+    const previewBuffer = await buildWatermarkedPreview(orientedImage);
     const previewKey = buildGenerationKey(generationId, "preview");
     await putObject("generations", previewKey, previewBuffer, "image/png");
     const previewUrl = publicUrlFor(previewKey);
