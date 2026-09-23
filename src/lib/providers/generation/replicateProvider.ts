@@ -1,0 +1,92 @@
+import Replicate from "replicate";
+import type { GenerationInput, GenerationProvider, GenerationResult } from "./types";
+import { GenerationProviderError } from "./types";
+
+/**
+ * Runs an open-source image-editing model hosted on Replicate (e.g.
+ * Qwen-Image-Edit — search "qwen image edit" on replicate.com for the
+ * current model identifier and copy it into REPLICATE_MODEL as
+ * "owner/model-name"). This is a hosted alternative to actually
+ * self-hosting Qwen-Image-Edit: same family of open-source model, no GPU
+ * server required, pay-per-run pricing instead of Google Cloud-style
+ * billing setup.
+ *
+ * Needs REPLICATE_API_TOKEN (https://replicate.com/account/api-tokens)
+ * and REPLICATE_MODEL. Assumes the model takes `image` (a URL) and
+ * `prompt` as input — true for most Replicate image-editing models, but
+ * schemas vary per model; check the model's page on replicate.com if it
+ * errors on the input shape.
+ */
+export class ReplicateImageProvider implements GenerationProvider {
+  readonly name = "replicate";
+  private client: Replicate | undefined;
+
+  private getClient(): Replicate {
+    if (this.client) return this.client;
+    const apiToken = process.env.REPLICATE_API_TOKEN;
+    if (!apiToken) {
+      throw new GenerationProviderError(
+        "REPLICATE_API_TOKEN is not set — get one at https://replicate.com/account/api-tokens",
+        false,
+      );
+    }
+    this.client = new Replicate({ auth: apiToken });
+    return this.client;
+  }
+
+  async generate(input: GenerationInput): Promise<GenerationResult> {
+    const model = process.env.REPLICATE_MODEL;
+    if (!model || !model.includes("/")) {
+      throw new GenerationProviderError(
+        'REPLICATE_MODEL is not set to a valid "owner/model-name" — search replicate.com for an image-editing model (e.g. "qwen image edit") and copy its identifier',
+        false,
+      );
+    }
+
+    let output: unknown;
+    try {
+      output = await this.getClient().run(model as `${string}/${string}`, {
+        input: {
+          image: input.sourceImageUrl,
+          prompt: input.prompt,
+        },
+      });
+    } catch (err) {
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      const retryable = status === 429 || (typeof status === "number" && status >= 500);
+      throw new GenerationProviderError(
+        `Replicate API error: ${err instanceof Error ? err.message : String(err)}`,
+        retryable,
+        err,
+      );
+    }
+
+    // Output shape varies per model: usually a single file, sometimes an
+    // array of files (one per requested output).
+    const fileOutput = Array.isArray(output) ? output[0] : output;
+    if (!fileOutput) {
+      throw new GenerationProviderError(
+        "Replicate returned no output — the model's input schema may not match {image, prompt}; check the model's page on replicate.com",
+        false,
+      );
+    }
+
+    const imageUrl =
+      typeof fileOutput === "string"
+        ? fileOutput
+        : (fileOutput as { url: () => URL }).url().toString();
+
+    const imageResponse = await fetch(imageUrl);
+    if (!imageResponse.ok) {
+      throw new GenerationProviderError(
+        `Failed to fetch Replicate output image: ${imageResponse.status}`,
+        true,
+      );
+    }
+
+    return {
+      imageBuffer: Buffer.from(await imageResponse.arrayBuffer()),
+      providerName: this.name,
+    };
+  }
+}

@@ -36,7 +36,7 @@ providers can be wired in later without touching call sites:
 
 | Interface | File | Default | Also available | Still stubbed |
 |---|---|---|---|---|
-| `GenerationProvider` | `src/lib/providers/generation` | `mockProvider` (watermarks whatever you upload, no real transformation) | `geminiProvider` — **real image-to-image editing** via Gemini ("Nano Banana"); set `GENERATION_PROVIDER="gemini"` + `GEMINI_API_KEY` | self-hosted Qwen-Image-Edit (the spec's original primary choice) |
+| `GenerationProvider` | `src/lib/providers/generation` | `mockProvider` (watermarks whatever you upload, no real transformation) | `geminiProvider` (Gemini "Nano Banana" — needs billing enabled, free tier's image quota is 0) or `replicateProvider` (any open-source image-editing model hosted on Replicate, e.g. Qwen-Image-Edit — no billing account needed, pay-per-run) — both do **real image-to-image editing** | self-hosted Qwen-Image-Edit (the spec's original primary choice — `replicateProvider` runs the same open-source model hosted, without a GPU server) |
 | `ModerationProvider` | `src/lib/providers/moderation` | `passthroughProvider` (always approves, logs a TODO) | — | AWS Rekognition or Hive |
 | `FulfillmentProvider` | `src/lib/providers/fulfillment` | `stubFulfillmentProvider` (logs + marks accepted) | — | Printful |
 | `NotificationProvider` | `src/lib/providers/notification` | `consoleNotificationProvider` (logs instead of sending) | — | Resend or Postmark |
