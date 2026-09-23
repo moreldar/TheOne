@@ -27,16 +27,21 @@ function watermarkSvg(width: number, height: number): Buffer {
  * without exposing anything print-ready.
  */
 export async function buildWatermarkedPreview(sourceBuffer: Buffer): Promise<Buffer> {
-  const resized = sharp(sourceBuffer).resize({
-    width: PREVIEW_MAX_WIDTH,
-    withoutEnlargement: true,
-  });
+  // sharp's .metadata() reflects the *input* image, not a pending resize —
+  // calling it on a not-yet-resized pipeline silently returns the
+  // original (often much larger) dimensions. Building the watermark SVG
+  // from those then fails compositing onto the actually-resized image
+  // ("Image to composite must have same dimensions or smaller"). Resize
+  // to a real buffer first, then read *that* buffer's metadata.
+  const resizedBuffer = await sharp(sourceBuffer)
+    .resize({ width: PREVIEW_MAX_WIDTH, withoutEnlargement: true })
+    .toBuffer();
 
-  const metadata = await resized.metadata();
+  const metadata = await sharp(resizedBuffer).metadata();
   const width = metadata.width ?? PREVIEW_MAX_WIDTH;
   const height = metadata.height ?? PREVIEW_MAX_WIDTH;
 
-  return resized
+  return sharp(resizedBuffer)
     .composite([{ input: watermarkSvg(width, height), top: 0, left: 0 }])
     .png()
     .toBuffer();
