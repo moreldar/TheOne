@@ -1,0 +1,25 @@
+# pnpm 10.16+ moved several settings out of package.json's "pnpm" field
+# (which newer pnpm versions now ignore, with just a warning) into this
+# file. This is what current pnpm actually reads.
+
+# Supply-chain safety check that rejects lockfile entries published
+# within a rolling window. Sensible for CI/production; disabled here so a
+# normal `pnpm install` of this from-scratch scaffold isn't blocked just
+# because some dependencies are newer than an arbitrary cutoff.
+minimumReleaseAge: 0
+
+# Packages allowed to run install/postinstall scripts — native binaries
+# for Prisma and sharp, plus their toolchain deps. All well-known,
+# already-vetted packages; without this pnpm refuses to run their build
+# scripts at all (Prisma's client stays ungenerated, sharp has no native
+# bindings) rather than just asking once.
+allowBuilds:
+  "@google/genai": true
+  "@prisma/client": true
+  "@prisma/engines": true
+  esbuild: true
+  msgpackr-extract: true
+  prisma: true
+  protobufjs: true
+  sharp: true
+  unrs-resolver: true

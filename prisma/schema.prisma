@@ -1,0 +1,357 @@
+// MemoryCanvas — Prisma schema
+//
+// Design notes:
+// - Guest checkout is a first-class flow: `User` is nullable everywhere a
+//   guest could otherwise plausibly act (Upload, Generation, Order). Guest
+//   orders are claimable later by matching email on account creation.
+// - `Generation` decouples the "creative" output from the "commercial"
+//   product: a single Generation can back many CartItems/OrderItems across
+//   different Products (canvas, mug, ...).
+// - Status fields are plain enums with application-level state machines in
+//   src/lib/stateMachines — Prisma enums keep the DB honest, the state
+//   machine functions keep transitions honest.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Auth (Auth.js / NextAuth Prisma adapter shapes)
+// ---------------------------------------------------------------------------
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  emailVerified DateTime?
+  name          String?
+  image         String?
+  isAdmin       Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts    Account[]
+  sessions    Session[]
+  uploads     Upload[]
+  generations Generation[]
+  orders      Order[]
+
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+// ---------------------------------------------------------------------------
+// Core funnel entities
+// ---------------------------------------------------------------------------
+
+enum ModerationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model Upload {
+  id     String  @id @default(cuid())
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  // Guest tracking — used for the free-generation rate limit and to let a
+  // guest find their own uploads without an account.
+  guestSessionId String
+  ipAddress      String?
+
+  storageKey  String // key within STORAGE_BUCKET_UPLOADS
+  publicUrl   String? // CDN URL, once available
+  mimeType    String
+  fileSizeBytes Int
+  width       Int?
+  height      Int?
+
+  // Consent / age-gate — required scaffolding even though moderation calls
+  // are stubbed. UI must block submission until both are true.
+  consentGiven   Boolean @default(false)
+  ageConfirmed18 Boolean @default(false)
+
+  moderationStatus ModerationStatus @default(PENDING)
+  moderationNotes  String? @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  generations Generation[]
+
+  @@index([guestSessionId])
+  @@index([userId])
+  @@map("uploads")
+}
+
+model Style {
+  id     String  @id @default(cuid())
+  name   String
+  slug   String  @unique
+  category String
+  description   String?
+  thumbnailUrl  String?
+  promptTemplate String @db.Text // "{{userNote}}" placeholder substituted in
+  sortOrder     Int     @default(0)
+  active        Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  generations Generation[]
+
+  @@map("styles")
+}
+
+enum GenerationStatus {
+  QUEUED
+  PROCESSING
+  SUCCEEDED
+  FAILED
+}
+
+model Generation {
+  id     String  @id @default(cuid())
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  uploadId String
+  upload   Upload @relation(fields: [uploadId], references: [id], onDelete: Cascade)
+
+  styleId String
+  style   Style  @relation(fields: [styleId], references: [id])
+
+  userNote String? // free-text add-on, capped at 150 chars by app validation
+
+  status      GenerationStatus @default(QUEUED)
+  provider    String? // which GenerationProvider handled this (e.g. "mock", "qwen")
+  attempts    Int              @default(0)
+  errorMessage String?         @db.Text
+
+  // Preview: watermarked + downscaled, safe to expose pre-purchase.
+  previewStorageKey String?
+  previewUrl        String?
+
+  // Print master: full-res, NEVER exposed until the owning order is paid.
+  printMasterStorageKey String?
+
+  moderationStatus ModerationStatus @default(PENDING)
+  moderationNotes  String?          @db.Text
+
+  guestSessionId String
+  ipAddress      String?
+
+  queuedAt     DateTime  @default(now())
+  processingAt DateTime?
+  completedAt  DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  cartItems CartItem[]
+
+  @@index([uploadId])
+  @@index([guestSessionId])
+  @@index([status])
+  @@map("generations")
+}
+
+model Product {
+  id   String @id @default(cuid())
+  name String
+  slug String @unique
+
+  // Print-on-demand provider linkage (Printful today, stubbed).
+  fulfillmentProviderSku String?
+  fulfillmentVariantId   String?
+
+  printWidthIn  Float
+  printHeightIn Float
+  dpiRequired   Int    @default(150)
+  bleedIn       Float  @default(0.125)
+
+  baseCostCents Int // what we pay the POD provider
+  priceCents    Int // what the customer pays
+  currency      String @default("usd")
+
+  thumbnailUrl String?
+  active       Boolean @default(true)
+  sortOrder    Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  cartItems  CartItem[]
+  orderItems OrderItem[]
+
+  @@map("products")
+}
+
+model CartItem {
+  id String @id @default(cuid())
+
+  // Carts are identified by guest session id (or user id once logged in) —
+  // no separate Cart model needed for an MVP.
+  guestSessionId String
+  userId         String?
+
+  generationId String
+  generation   Generation @relation(fields: [generationId], references: [id], onDelete: Cascade)
+
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+
+  quantity Int @default(1)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orderItems OrderItem[]
+
+  @@index([guestSessionId])
+  @@map("cart_items")
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  IN_PRODUCTION
+  SHIPPED
+  DELIVERED
+  REFUNDED
+  CANCELLED
+}
+
+model Order {
+  id     String  @id @default(cuid())
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  guestEmail String? // for guest orders; also used to claim later
+  guestAccessToken String? @unique // signed token for the guest order-status page
+
+  status OrderStatus @default(PENDING)
+
+  stripeCheckoutSessionId String  @unique
+  stripePaymentIntentId   String?
+
+  shippingName    String
+  shippingLine1   String
+  shippingLine2   String?
+  shippingCity    String
+  shippingState   String?
+  shippingPostalCode String
+  shippingCountry String
+
+  subtotalCents Int
+  shippingCents Int @default(0)
+  taxCents      Int @default(0)
+  totalCents    Int
+  currency      String @default("usd")
+
+  fulfillmentProviderOrderId String?
+  fulfillmentStatus          String?
+  trackingNumber             String?
+  trackingUrl                String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  paidAt    DateTime?
+  shippedAt DateTime?
+  deliveredAt DateTime?
+
+  items OrderItem[]
+
+  @@index([userId])
+  @@index([guestEmail])
+  @@map("orders")
+}
+
+model OrderItem {
+  id String @id @default(cuid())
+
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  // Snapshot of the cart item at purchase time so later edits to
+  // Product pricing never retroactively change a placed order.
+  cartItemId String?
+  cartItem   CartItem? @relation(fields: [cartItemId], references: [id], onDelete: SetNull)
+
+  productId   String
+  product     Product @relation(fields: [productId], references: [id])
+  productName String // snapshot
+  unitPriceCents Int // snapshot
+
+  quantity Int
+
+  // Snapshot of what to print — copied from the Generation at order time so
+  // fulfillment always has a stable reference even if the Generation record
+  // changes later.
+  printMasterStorageKey String
+
+  createdAt DateTime @default(now())
+
+  @@map("order_items")
+}
+
+// ---------------------------------------------------------------------------
+// Analytics (lightweight funnel event log; swap for a real tool later)
+// ---------------------------------------------------------------------------
+
+model AnalyticsEvent {
+  id             String   @id @default(cuid())
+  name           String
+  guestSessionId String?
+  userId         String?
+  properties     Json?
+  createdAt      DateTime @default(now())
+
+  @@index([name])
+  @@index([guestSessionId])
+  @@map("analytics_events")
+}

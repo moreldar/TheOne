@@ -1,0 +1,19 @@
+node_modules/
+.next/
+out/
+dist/
+.env
+.env*.local
+*.log
+.DS_Store
+coverage/
+.vercel
+next-env.d.ts
+tsconfig.tsbuildinfo
+
+# STORAGE_PROVIDER=local dev/test artifacts (see src/lib/storage/localProvider.ts)
+public/uploads/
+public/generations/
+
+# local redis-server dump (created when running `redis-server` from the repo root)
+dump.rdb
