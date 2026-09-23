@@ -9,6 +9,7 @@ const styles = [
   {
     name: "Watercolor",
     slug: "watercolor",
+    thumbnailUrl: "/style-thumbnails/watercolor.jpg",
     category: "Painterly",
     description: "Soft, dreamy watercolor portrait.",
     promptTemplate:
@@ -18,6 +19,7 @@ const styles = [
   {
     name: "Oil Painting",
     slug: "oil-painting",
+    thumbnailUrl: "/style-thumbnails/oil-painting.jpg",
     category: "Painterly",
     description: "Classic fine-art oil portrait, rich brushwork.",
     promptTemplate:
@@ -27,6 +29,7 @@ const styles = [
   {
     name: "Pop Art",
     slug: "pop-art",
+    thumbnailUrl: "/style-thumbnails/pop-art.jpg",
     category: "Graphic",
     description: "Bold Warhol-style pop art.",
     promptTemplate:
@@ -36,6 +39,7 @@ const styles = [
   {
     name: "Anime",
     slug: "anime",
+    thumbnailUrl: "/style-thumbnails/anime.jpg",
     category: "Illustrated",
     description: "Japanese anime-style illustration.",
     promptTemplate:
@@ -45,6 +49,7 @@ const styles = [
   {
     name: "Classic Cartoon",
     slug: "classic-cartoon",
+    thumbnailUrl: "/style-thumbnails/classic-cartoon.jpg",
     category: "Illustrated",
     description: "Playful classic cartoon caricature.",
     promptTemplate:
@@ -54,6 +59,7 @@ const styles = [
   {
     name: "Pencil Sketch",
     slug: "pencil-sketch",
+    thumbnailUrl: "/style-thumbnails/pencil-sketch.jpg",
     category: "Drawn",
     description: "Fine graphite pencil sketch.",
     promptTemplate:
@@ -63,6 +69,7 @@ const styles = [
   {
     name: "Charcoal Drawing",
     slug: "charcoal-drawing",
+    thumbnailUrl: "/style-thumbnails/charcoal-drawing.jpg",
     category: "Drawn",
     description: "Dramatic charcoal portrait.",
     promptTemplate:
@@ -72,6 +79,7 @@ const styles = [
   {
     name: "Renaissance",
     slug: "renaissance",
+    thumbnailUrl: "/style-thumbnails/renaissance.jpg",
     category: "Painterly",
     description: "Classical Renaissance-era portrait.",
     promptTemplate:
@@ -81,6 +89,7 @@ const styles = [
   {
     name: "Cyberpunk",
     slug: "cyberpunk",
+    thumbnailUrl: "/style-thumbnails/cyberpunk.jpg",
     category: "Stylized",
     description: "Neon-lit cyberpunk portrait.",
     promptTemplate:
@@ -90,6 +99,7 @@ const styles = [
   {
     name: "Fantasy",
     slug: "fantasy",
+    thumbnailUrl: "/style-thumbnails/fantasy.jpg",
     category: "Stylized",
     description: "Epic fantasy character art.",
     promptTemplate:
@@ -99,6 +109,7 @@ const styles = [
   {
     name: "Vintage Photograph",
     slug: "vintage-photograph",
+    thumbnailUrl: "/style-thumbnails/vintage-photograph.jpg",
     category: "Photographic",
     description: "Sepia-toned vintage photo look.",
     promptTemplate:
@@ -108,6 +119,7 @@ const styles = [
   {
     name: "Minimalist Line Art",
     slug: "minimalist-line-art",
+    thumbnailUrl: "/style-thumbnails/minimalist-line-art.jpg",
     category: "Graphic",
     description: "Single-line minimalist illustration.",
     promptTemplate:
