@@ -1,4 +1,5 @@
 import { config } from "@/lib/config";
+import { GeminiImageProvider } from "./geminiProvider";
 import { MockGenerationProvider } from "./mockProvider";
 import type { GenerationProvider } from "./types";
 
@@ -18,8 +19,10 @@ export function getGenerationProvider(): GenerationProvider {
     case "mock":
       cached = new MockGenerationProvider();
       break;
+    case "gemini":
+      cached = new GeminiImageProvider();
+      break;
     // TODO(real-integration): case "qwen": cached = new QwenImageEditProvider(); break;
-    // TODO(real-integration): case "gemini": cached = new GeminiImageProvider(); break;
     default:
       console.warn(
         `[generation] Unknown GENERATION_PROVIDER "${config.providers.generation}", falling back to mock.`,

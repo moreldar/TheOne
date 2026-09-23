@@ -34,17 +34,18 @@ These were called out in the spec as "decide upfront" items:
 Four external integrations are stubbed behind clean interfaces so real
 providers can be wired in later without touching call sites:
 
-| Interface | File | Stub today | Wire in later |
-|---|---|---|---|
-| `GenerationProvider` | `src/lib/providers/generation` | `mockProvider` (returns the source image, tinted, as a fake "generation") | self-hosted Qwen-Image-Edit (primary), Gemini/Nano Banana image API (fallback) |
-| `ModerationProvider` | `src/lib/providers/moderation` | `passthroughProvider` (always approves, logs a TODO) | AWS Rekognition or Hive |
-| `FulfillmentProvider` | `src/lib/providers/fulfillment` | `stubFulfillmentProvider` (logs + marks accepted) | Printful |
-| `NotificationProvider` | `src/lib/providers/notification` | `consoleNotificationProvider` (logs instead of sending) | Resend or Postmark |
+| Interface | File | Default | Also available | Still stubbed |
+|---|---|---|---|---|
+| `GenerationProvider` | `src/lib/providers/generation` | `mockProvider` (watermarks whatever you upload, no real transformation) | `geminiProvider` — **real image-to-image editing** via Gemini ("Nano Banana"); set `GENERATION_PROVIDER="gemini"` + `GEMINI_API_KEY` | self-hosted Qwen-Image-Edit (the spec's original primary choice) |
+| `ModerationProvider` | `src/lib/providers/moderation` | `passthroughProvider` (always approves, logs a TODO) | — | AWS Rekognition or Hive |
+| `FulfillmentProvider` | `src/lib/providers/fulfillment` | `stubFulfillmentProvider` (logs + marks accepted) | — | Printful |
+| `NotificationProvider` | `src/lib/providers/notification` | `consoleNotificationProvider` (logs instead of sending) | — | Resend or Postmark |
 
-Each stub file has a `TODO(real-integration)` comment describing exactly
-what to change. Provider selection is via env var (`GENERATION_PROVIDER`,
-`MODERATION_PROVIDER`, `FULFILLMENT_PROVIDER`, `NOTIFICATION_PROVIDER`), so
-swapping providers never requires touching calling code.
+Each still-stubbed file has a `TODO(real-integration)` comment describing
+exactly what to change. Provider selection is via env var
+(`GENERATION_PROVIDER`, `MODERATION_PROVIDER`, `FULFILLMENT_PROVIDER`,
+`NOTIFICATION_PROVIDER`), so swapping providers never requires touching
+calling code.
 
 ## Getting started
 

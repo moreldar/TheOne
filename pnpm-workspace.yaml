@@ -14,10 +14,12 @@ minimumReleaseAge: 0
 # scripts at all (Prisma's client stays ungenerated, sharp has no native
 # bindings) rather than just asking once.
 allowBuilds:
+  "@google/genai": true
   "@prisma/client": true
   "@prisma/engines": true
   esbuild: true
   msgpackr-extract: true
   prisma: true
+  protobufjs: true
   sharp: true
   unrs-resolver: true
