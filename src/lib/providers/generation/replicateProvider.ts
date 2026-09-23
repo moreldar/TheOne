@@ -3,19 +3,19 @@ import type { GenerationInput, GenerationProvider, GenerationResult } from "./ty
 import { GenerationProviderError } from "./types";
 
 /**
- * Runs an open-source image-editing model hosted on Replicate (e.g.
- * Qwen-Image-Edit — search "qwen image edit" on replicate.com for the
- * current model identifier and copy it into REPLICATE_MODEL as
- * "owner/model-name"). This is a hosted alternative to actually
- * self-hosting Qwen-Image-Edit: same family of open-source model, no GPU
- * server required, pay-per-run pricing instead of Google Cloud-style
- * billing setup.
+ * Runs an open-source image-editing model hosted on Replicate. This is a
+ * hosted alternative to actually self-hosting Qwen-Image-Edit: same
+ * family of open-source model, no GPU server required, pay-per-run
+ * pricing instead of Google Cloud-style billing setup.
  *
  * Needs REPLICATE_API_TOKEN (https://replicate.com/account/api-tokens)
- * and REPLICATE_MODEL. Assumes the model takes `image` (a URL) and
- * `prompt` as input — true for most Replicate image-editing models, but
- * schemas vary per model; check the model's page on replicate.com if it
- * errors on the input shape.
+ * and REPLICATE_MODEL (default: qwen/qwen-image-edit-plus, confirmed
+ * against its actual published schema — https://replicate.com/qwen/qwen-image-edit-plus/api).
+ * Notably `image` is an *array* of URLs even for a single source image,
+ * not a bare string. If you swap REPLICATE_MODEL for a different model,
+ * check its own schema — the optional fields below (aspect_ratio,
+ * output_format, go_fast) are specific to this one and an unfamiliar
+ * model may reject them.
  */
 export class ReplicateImageProvider implements GenerationProvider {
   readonly name = "replicate";
@@ -35,10 +35,10 @@ export class ReplicateImageProvider implements GenerationProvider {
   }
 
   async generate(input: GenerationInput): Promise<GenerationResult> {
-    const model = process.env.REPLICATE_MODEL;
-    if (!model || !model.includes("/")) {
+    const model = process.env.REPLICATE_MODEL || "qwen/qwen-image-edit-plus";
+    if (!model.includes("/")) {
       throw new GenerationProviderError(
-        'REPLICATE_MODEL is not set to a valid "owner/model-name" — search replicate.com for an image-editing model (e.g. "qwen image edit") and copy its identifier',
+        `REPLICATE_MODEL is not a valid "owner/model-name": "${model}"`,
         false,
       );
     }
@@ -47,8 +47,11 @@ export class ReplicateImageProvider implements GenerationProvider {
     try {
       output = await this.getClient().run(model as `${string}/${string}`, {
         input: {
-          image: input.sourceImageUrl,
+          image: [input.sourceImageUrl],
           prompt: input.prompt,
+          aspect_ratio: "match_input_image",
+          output_format: "png",
+          go_fast: true,
         },
       });
     } catch (err) {
